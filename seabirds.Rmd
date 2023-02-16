@@ -1,0 +1,63 @@
+---
+title: "sea birds"
+author: "Atalanta Ritter"
+date: "2023-02-16"
+output: pdf_document
+---
+## Sea Bird Data Analysis 
+The chunk below is just for set up/loading in packages. 
+```{r}
+# set working directory
+rm(list = ls())
+getwd()
+setwd("~/GitHub/QB2023_Ritter")
+# load in packages
+package.list <- c('vegan', 'tidyverse', 'ggplot2', 'dplyr', 'broom')
+for (package in package.list) {
+  if (!require(package, character.only = TRUE, quietly = TRUE)) {
+    install.packages(package)
+  }
+  library(c(package), character.only = TRUE)
+}
+```
+
+## Cluster Analysis  
+```{r}
+# loading in dataset
+seabirds <- read.csv("/Users/Atalanta/Downloads/Data_DRYAD_Seabirds.csv")
+dataspecies <- seabirds[-c(37,59, 75,76,78,79,80, 82,83,112,121,135,165,172,177,190,198,259,280,307,311,312) ,2:5] 
+# removed xtra columns, sites with no observations of any species and 
+# one outlier site with 160 shearwaters
+# cluster analysis
+gplots::heatmap.2(as.matrix(dataspecies), 
+                  distfun = function(x) vegdist(x, method = "bray"),
+                  hclustfun = function(x) hclust(x, method = "ward.D2"),
+                  col = viridis, trace = "none", density.info = "none")
+```
+After removing that one site with 160 shearwaters, it looks like we have some clearer clustering patterns! 
+
+## Mantel Test 
+The code below is for a Mantel Test comparing the species data with data on distance from rat-infested vs. rat-free islands. 
+```{r}
+# creating matrix of distances from rat-infested and rat-free islands
+datarat <- seabirds[-c(37,59, 75,76,78,79,80, 82,83,112,121,135,165,172,177,190,198,259,280,307,311,312) , c(20,22)] 
+# mantel test: test whether there is a correlation between 
+seabird.dist <- vegdist(dataspecies, method = "bray")
+rat.dist <- vegdist(datarat, method = "euclid")
+mantel(seabird.dist, rat.dist)
+```
+The results are significant (r = 0.1263, p = 0.001), meaning that as species composition becomes more dissimilar between sites, distances from rat-free and rat-infested islands also become more dissimilar? 
+
+## Mantel Test 
+The code below is for a Mantel test comparing species data with standardized environmental data on 4 different variables: sea surface temperature, chlorophyll a concentration, net primary productivity, and sea-level anomaly. 
+```{r}
+# creating matrix with just the environmental data 
+dataenv <- seabirds[-c(37,59, 75,76,78,79,80, 82,83,112,121,135,165,172,177,190,198,259,280,307,311,312) ,14:17] 
+# standardizing environmental data: scaled environmental variables to have 
+# mean = 0 and standard deviation = 1 
+dataenv.std <- dataenv %>% mutate_at(c('Chl_Climonth', 'SST_Climonth', 'NPP_Climonth', 'SLA_Climonth'), ~(scale(.) %>% as.vector))
+# run mantel test 
+env.dist <- vegdist(dataenv.std, method = "euclid")
+mantel(seabird.dist, env.dist)
+```
+This result is NOT significant (r = 0.02354, r = 0.12). 
