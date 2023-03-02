@@ -1,0 +1,117 @@
+---
+title: "sea birds"
+author: "Atalanta Ritter"
+date: "2023-02-16"
+output: pdf_document
+---
+## Sea Bird Data Analysis 
+The chunk below is just for set up/loading in packages. 
+```{r}
+# set working directory
+rm(list = ls())
+getwd()
+setwd("~/GitHub/team3")
+# load in packages
+package.list <- c('vegan', 'tidyverse', 'ggplot2', 'dplyr', 'broom', 'viridis')
+for (package in package.list) {
+  if (!require(package, character.only = TRUE, quietly = TRUE)) {
+    install.packages(package)
+  }
+  library(c(package), character.only = TRUE)
+}
+```
+
+## Cluster Analysis  
+```{r}
+# loading in dataset
+seabirds <- read.csv("/Users/Atalanta/Downloads/Data_DRYAD_Seabirds.csv")
+dataspecies <- seabirds[-c(37,59, 75,76,78,79,80, 82,83,112,121,135,165,172,177,190,198,259,280,307,311,312) ,2:5] 
+# removed xtra columns, sites with no observations of any species and 
+# one outlier site with 160 shearwaters
+# cluster analysis
+gplots::heatmap.2(as.matrix(dataspecies), 
+                  distfun = function(x) vegdist(x, method = "bray"),
+                  hclustfun = function(x) hclust(x, method = "ward.D2"),
+                  col = viridis, trace = "none", density.info = "none")
+```
+After removing that one site with 160 shearwaters, it looks like we have some clearer clustering patterns! 
+
+## Mantel Tests 
+The code below is for a Mantel Test comparing the species data with data on distance from rat-infested vs. rat-free islands. 
+```{r}
+# creating matrix of distances from rat-infested and rat-free islands
+datarat <- seabirds[-c(37,59, 75,76,78,79,80, 82,83,112,121,135,165,172,177,190,198,259,280,307,311,312) , c(20,22)] 
+# mantel test: test whether there is a correlation between 
+seabird.dist <- vegdist(dataspecies, method = "bray")
+rat.dist <- vegdist(datarat, method = "euclid")
+mantel(seabird.dist, rat.dist)
+```
+The results are significant (r = 0.1263, p = 0.001), meaning that as species composition becomes more dissimilar between sites, distances from rat-free and rat-infested islands also become more dissimilar. 
+
+The code below is for two Mantel tests comparing species data with standardized environmental data on 4 different variables: sea surface temperature, chlorophyll a concentration, net primary productivity, and sea-level anomaly. 
+We subdivided these environmental variables into two groups: food availability (NPP, CHL) and climate (SST, SLA). 
+```{r}
+# MANTEL TEST COMPARING PROXIES FOR FOOD AVAILABILITY VS. SPECIES DISTRIBUTION
+datafood <- seabirds[-c(37,59, 75,76,78,79,80, 82,83,112,121,135,165,172,177,190,198,259,280,307,311,312) ,c(14,16)] 
+# standardizing environmental data: scaled environmental variables to have 
+# mean = 0 and standard deviation = 1 
+datafood.std <- dataenv %>% mutate_at(c('Chl_Climonth', 'NPP_Climonth'), ~(scale(.) %>% as.vector))
+# run mantel test 
+food.dist <- vegdist(datafood.std, method = "euclid")
+mantel(seabird.dist, food.dist)
+# marginally significant, p = 0.065
+# MANTEL TEST COMPARING CLIMATE VS. SPECIES DISTRIBUTION
+dataclim <- seabirds[-c(37,59, 75,76,78,79,80, 82,83,112,121,135,165,172,177,190,198,259,280,307,311,312) ,c(15,17)] 
+# standardizing environmental data: scaled environmental variables to have 
+# mean = 0 and standard deviation = 1 
+dataclim.std <- dataenv %>% mutate_at(c('SST_Climonth', 'SLA_Climonth'), ~(scale(.) %>% as.vector))
+# run mantel test 
+clim.dist <- vegdist(dataclim.std, method = "euclid")
+mantel(seabird.dist, clim.dist)
+# marginally significant, p = 0.069
+```
+## Linear Models
+The Mantel test results suggest that distance from rat-infested islands is related to species distribution. Next, we wanted to ask the question of whether this trend is the same across seabird species or if the effects are species-specific. We ran linear models for each of the species vs. distance to nearest rat-infested island.
+
+```{r}
+# are the correlations between distance from rat islands + species distribution general or species specific? 
+# linear regressions for rat distance vs. [species name] distribution
+# 1. Brown Noddy
+noddy.reg <- lm(Brown_Noddy ~ Dist_Coast_R, data = seabirds)
+summary(noddy.reg)
+# Brown Noddy plot 
+ggplot(seabirds,aes(Dist_Coast_R, Brown_Noddy)) +
+  geom_point() +
+  geom_smooth(method='lm') +
+  xlab("Distance to closest rat-infested island (km)") +
+  ylab("Brown noddy abundance")
+# highly significant (but negative??), p = 5.19e-8
+# 2. Wedge-tailed Shearwater regression + plot 
+shearwater.reg <- lm(Wedge_Tailed_Shearwater ~ Dist_Coast_R, data = seabirds[-80,])
+summary(shearwater.reg) # get rid of 1 outlier site (doesn't change the significance that much)
+ggplot(seabirds[-80,],aes(Dist_Coast_R, Wedge_Tailed_Shearwater)) +
+  geom_point() +
+  geom_smooth(method='lm') +
+  xlab("Distance to closest rat-infested island (km)") +
+  ylab("Wedge-Tailed Shearwater Abundance")
+# no significance, p = 0.692
+# 3. White Tern regression + plot 
+tern.reg <- lm(White_Tern ~ Dist_Coast_R, data = seabirds[-c(99,238),]) # getting rid of outlier sites 
+summary(tern.reg)
+ggplot(seabirds[-c(99,238),],aes(Dist_Coast_R, White_Tern)) +
+  geom_point() +
+  geom_smooth(method='lm') +
+  xlab("Distance to closest rat-infested island (km)") +
+  ylab("White tern abundance")
+# significant (again negative), p = 1.04e-5
+# Red-footed Booby regression + plot 
+booby.reg <- lm(Red_footed_Booby ~ Dist_Coast_R, data = seabirds[-144,])
+summary(booby.reg)
+ggplot(seabirds[-144,], aes(Dist_Coast_R, Red_footed_Booby)) +
+  geom_point() +
+  geom_smooth(method='lm') +
+  xlab("Distance to closest rat-infested island (km)") +
+  ylab("Red-footed booby abundance")
+# not significant, p =0.305
+```
+
